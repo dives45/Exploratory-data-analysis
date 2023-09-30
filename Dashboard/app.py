@@ -1,13 +1,18 @@
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objs as go
 import dash
 import dash_bootstrap_components as dbc
 from dash import dcc, html, Input, Output
 import folium
+from sklearn.linear_model import LinearRegression
 
 # TODO just drop columns not in use before importing
 df = pd.read_pickle("data.pkl")
 airport_data = pd.read_pickle("airport_data.pkl")
+
+# Add datetime
+df["Date"] = pd.to_datetime({"year": df["Year"], "month": df["Month"], "day": df["DayofMonth"]})
 
 unique_airports = pd.unique(pd.concat([df['Origin'], df['Dest']]))
 
@@ -132,6 +137,21 @@ def update_map():
 
     return m_selected._repr_html_()
 
+# Callback for delay over date
+@app.callback(
+    Output(component_id='delay-over-date', component_property='figure'),
+    Input(component_id='delay-selector', component_property='value')
+)
+def update_graph(selected_delay):   
+    delay_filtered_df = df[["Date", f"{selected_delay}"]].groupby("Date").mean().reset_index()
+
+    # Create the chart
+    fig = px.line(delay_filtered_df, x="Date", y=f"{selected_delay}", 
+                title="Mean delay per day through 2008",
+                labels={"Date": "Date", f"{selected_delay}": "Mean Delay (minutes)"})
+
+    return fig
+
 app.layout = dbc.Container(
     [
         dbc.Row(
@@ -194,11 +214,29 @@ app.layout = dbc.Container(
                         ),
                 ),
                 dbc.Col(
-                    dcc.Graph(id='flights-per-carrier')   ,
+                    dcc.Graph(id='flights-per-carrier'),
                     width=9                 
                 ),
                 html.Br() # Breathing room
             ]
+        ),
+
+        dbc.Row(
+            [
+                dbc.Col(
+                    dcc.RadioItems(
+                        options=[{'label': delay_name, 'value': delay_code} for delay_code, delay_name in delay_types.items()],
+                        value='DepDelay',
+                        id='delay-selector'
+                    ),
+                ),
+                dbc.Col(
+                    dcc.Graph(id='delay-over-date'),
+                    width=10
+                ),
+                html.Br()
+            ],
+            align="center",
         ),
     ],
     fluid=True,
